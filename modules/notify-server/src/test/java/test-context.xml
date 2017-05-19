@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:jms="http://www.springframework.org/schema/jms"
+       xmlns:p="http://www.springframework.org/schema/p"
+       xsi:schemaLocation="http://www.springframework.org/schema/jms http://www.springframework.org/schema/jms/spring-jms-4.3.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.3.xsd">
+
+    <context:property-placeholder
+            location="file:#{systemEnvironment['BNM_CONFIG']}/config.properties"/>
+
+    <bean id="flyway" class="org.flywaydb.core.Flyway" init-method="migrate"
+          p:dataSource-ref="mysqlDataSource"
+          p:locations="classpath:db_bnm_notify/migration"/>
+
+    <bean id="mysqlDataSource" class="org.apache.commons.dbcp.BasicDataSource"
+          destroy-method="close" p:driverClassName="${jdbc.driverClass}" p:url="${notify.jdbc.url}"
+          p:username="${jdbc.username}" p:password="${jdbc.password}"
+          p:testWhileIdle="true" p:testOnBorrow="false" p:validationQuery="SELECT 1"
+          p:timeBetweenEvictionRunsMillis="7200000" p:numTestsPerEvictionRun="50"/>
+
+    <bean id="targetConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory"
+          p:userName="${notify.jms.username}" p:password="${notify.jms.password}">
+        <property name="brokerURL" value="tcp://bangnongmang.cn:61616"/>
+    </bean>
+
+
+    <bean id="pooledConnectionFactory" class="org.apache.activemq.pool.PooledConnectionFactory">
+        <property name="connectionFactory" ref="targetConnectionFactory"/>
+        <property name="maxConnections" value="10"/>
+    </bean>
+
+    <bean id="connectionFactory"
+          class="org.springframework.jms.connection.CachingConnectionFactory">
+        <property name="targetConnectionFactory" ref="pooledConnectionFactory"/>
+    </bean>
+
+
+    <bean id="notifyServer" class="cn.bangnongmang.notify.server.DefaultNotifyServer"
+          depends-on="flyway">
+
+    </bean>
+    <bean id="businessChannel" class="cn.bangnongmang.notify.server.channel.BusinessChannel">
+        <constructor-arg name="connectionFactory" ref="connectionFactory"></constructor-arg>
+        <constructor-arg name="dataSource" ref="mysqlDataSource"></constructor-arg>
+        <constructor-arg name="queuePrefix" value="${notify.jms.destination}"></constructor-arg>
+        <constructor-arg name="notifyServer" ref="notifyServer"></constructor-arg>
+    </bean>
+
+    <bean id="controlChannel" class="cn.bangnongmang.notify.server.channel.ControlChannel">
+        <constructor-arg name="connectionFactory" ref="connectionFactory"></constructor-arg>
+        <constructor-arg name="dataSource" ref="mysqlDataSource"></constructor-arg>
+        <constructor-arg name="queuePrefix" value="${notify.jms.destination}"></constructor-arg>
+        <constructor-arg name="notifyServer" ref="notifyServer"></constructor-arg>
+    </bean>
+
+    <bean class="cn.bangnongmang.notify.server.service.impl.NotifyWechatSender">
+        <constructor-arg name="preSharedKey" value="${wx.oacc.preSharedKey}"></constructor-arg>
+        <constructor-arg name="brocaster" ref="businessChannel"></constructor-arg>
+        <constructor-arg name="getAccessTokenUrl"
+                         value="${wx.oacc.getAccessTokenUrl}"></constructor-arg>
+        <constructor-arg name="getSaltStringUrl"
+                         value="${wx.oacc.getSaltStringUrl}"></constructor-arg>
+    </bean>
+
+</beans>

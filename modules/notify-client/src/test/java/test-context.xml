@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:jms="http://www.springframework.org/schema/jms" xmlns:p="http://www.springframework.org/schema/p"
+	xsi:schemaLocation="http://www.springframework.org/schema/jms http://www.springframework.org/schema/jms/spring-jms-4.3.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.3.xsd">
+
+	<context:property-placeholder
+		location="file:#{systemEnvironment['BNM_CONFIG']}/config.properties" />
+
+	<bean id="targetConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory"
+		p:userName="${notify.jms.username}" p:password="${notify.jms.password}">
+		<property name="brokerURL" value="tcp://bangnongmang.cn:61616" />
+	</bean>
+
+
+	<bean id="pooledConnectionFactory" class="org.apache.activemq.pool.PooledConnectionFactory">
+		<property name="connectionFactory" ref="targetConnectionFactory" />
+		<property name="maxConnections" value="10" />
+	</bean>
+
+	<bean id="connectionFactory"
+		class="org.springframework.jms.connection.CachingConnectionFactory">
+		<property name="targetConnectionFactory" ref="pooledConnectionFactory" />
+	</bean>
+
+
+	<bean id="notifyClient" class="cn.bangnongmang.notify.client.DefaultNotifyClient">
+		<constructor-arg name="connectionFactory" ref="connectionFactory" />
+		<constructor-arg name="queuePrefix" value="${notify.jms.destination}"></constructor-arg>
+	</bean>
+
+</beans>
